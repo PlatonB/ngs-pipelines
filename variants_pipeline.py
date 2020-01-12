@@ -1,17 +1,18 @@
 print('''
 Python3-скрипт, формирующий пайплайн
 от ридов до характеристик SNPs.
-Автор: Платон Быкадоров (platon.work@gmail.com), 2019.
-Версия: V0.9-beta.
+Автор: Платон Быкадоров (platon.work@gmail.com), 2019-2020.
+Версия: V1.0.
 Лицензия: GNU General Public License version 3.
 Поддержать проект: https://money.yandex.ru/to/41001832285976
-Документация: 
+Документация: https://github.com/PlatonB/ngs-pipelines/blob/master/README.md
 
 Упрощённая схема пайплайна:
 Выравнивание --> коллинг --> (только для человека) аннотирование.
 
-На вход идут FASTA/Q-файлы с исследуемыми ридами
-(WGS) и один FASTA/Q с референсным геномом.
+На вход идут FASTA/Q-файлы с исследуемыми
+ридами (WGS, WES, PacBio) и один
+FASTA/Q с референсным геномом.
 Каждый FASTA/Q-файл (или каждая пара
 файлов) обрабатывается по-отдельности.
 
@@ -51,7 +52,7 @@ run_command = lambda command: print(run(command,
 
 ####################################################################################################
 
-import os, re, sys, shutil
+import os, re, sys
 from subprocess import run, PIPE, STDOUT
 
 src_dir_path = os.path.normpath(input('Путь к папке с исследуемыми FASTA/Q-файлами: '))
@@ -69,6 +70,12 @@ if reads not in ['paired', 'p', 'unpaired', 'u']:
         print(f'{reads} - недопустимая опция')
         sys.exit()
         
+seq_type = input('''\nТип секвенирования
+[wgs|wes|pacbio]: ''').upper()
+if seq_type not in ['WGS', 'WES', 'PACBIO']:
+        print(f'{seq_type} - недопустимая опция')
+        sys.exit()
+        
 num_of_threads = input('''\nВо сколько потоков производить обработку?
 (игнорирование ввода ==> 4 потока)
 [1|2|3|4(|<enter>)|...]: ''')
@@ -78,22 +85,11 @@ if num_of_threads == '':
 root_pass = input('''\nПароль root
 (убедитесь, что никто не подглядывает ☺) ''')
 
-#Создание симлинков, упрощающих в
-#дальнейшем вызов компонентов пайплайна.
-if os.path.exists('bgzip') == False:
-        os.symlink('samtools-bin/bin/bgzip', 'bgzip')
-if os.path.exists('bowtie2-build') == False:
-        os.symlink('bowtie2-bin/bowtie2-build', 'bowtie2-build')
-if os.path.exists('bowtie2') == False:
-        os.symlink('bowtie2-bin/bowtie2', 'bowtie2')
-if os.path.exists('samtools') == False:
-        os.symlink('samtools-bin/bin/samtools', 'samtools')
-        
 #Если референсный геном изначально
 #не заархивирован с помощью BGZip,
 #то это будет осуществлено сейчас.
 if ref_file_name[-3:] != '.gz':
-        run_command(f'./bgzip -@ 4 -l 9 -i {ref_file_path}')
+        run_command(f'bgzip -@ 4 -l 9 -i {ref_file_path}')
         ref_file_name += '.gz'
         ref_file_path = os.path.join(ref_dir_path, ref_file_name)
         
@@ -110,9 +106,9 @@ for file_name in os.listdir(ref_dir_path):
         if re.match(species + r'\.\d+\.bt\d+', file_name) != None:
                 break
 else:
-        run_command(f'./bowtie2-build --threads {num_of_threads} {ref_file_path} {os.path.join(ref_dir_path, species)}')
+        run_command(f'bowtie2-build --threads {num_of_threads} {ref_file_path} {os.path.join(ref_dir_path, species)}')
 if os.path.exists(f'{ref_file_path}.fai') == False:
-        run_command(f'./samtools faidx {ref_file_path}')
+        run_command(f'samtools faidx {ref_file_path}')
         
 #Сортировка имён исследуемых FASTA/Q.
 #В случае, если риды парные, то в
@@ -126,21 +122,14 @@ src_file_names = sorted(os.listdir(src_dir_path))
 #В качестве подготовки к считыванию исходных
 #данных, растащим имена как парных, так
 #и непарных файлов по вложенным спискам.
-nested_file_names = []
+src_file_names_quan = len(src_file_names)
 if reads in ['paired', 'p']:
-        if len(src_file_names) % 2 == 1:
+        if src_file_names_quan % 2 == 1:
                 print(f'''При исследовании парных ридов количество
 исходных файлов должно быть чётным''')
                 sys.exit()
         else:
-                even = True
-                for src_file_name in src_file_names:
-                        if even == True:
-                                pair, even = [src_file_name], False
-                        else:
-                                pair.append(src_file_name)
-                                nested_file_names.append(pair)
-                                even = True
+                nested_file_names = [src_file_names[index:index + 2] for index in range(0, src_file_names_quan, 2)]
 else:
         nested_file_names = [[src_file_name] for src_file_name in src_file_names]
         
@@ -188,11 +177,14 @@ for element in nested_file_names:
         trg_dir_path = os.path.join(trg_top_dir_path, src_file_base)
         os.mkdir(trg_dir_path)
         
-        #Создание путей к будущим результатам: BAM-файлу
-        #(продукту выравнивания и SAMtools-обработки)
-        #и сжатому VCF (продукту коллинга).
+        #Создание путей к будущим результатам:
+        #BAM-файлу (продукту выравнивания и
+        #SAMtools-обработки), сжатому
+        #VCF (продукту коллинга) и TSV
+        #(получающемуся при аннотировании).
         bam_file_path = os.path.join(trg_dir_path, src_file_base) + '_srtd.bam'
         vcf_file_path = os.path.join(trg_dir_path, src_file_base) + '.vcf.gz'
+        ann_file_path = os.path.join(trg_dir_path, src_file_base) + '_ann.tsv'
         
         #Основная часть пайплайна.
         #Выравнивание исследуемого
@@ -205,30 +197,22 @@ for element in nested_file_names:
         #SNPs человеческого генома
         #ещё и подробно аннотируются.
         run_command(f'''
-./bowtie2 -p {num_of_threads} -x {os.path.join(ref_dir_path, species)} {reads_format_opt} {reads_files_opt} |
-./samtools view -@ {num_of_threads} -b |
-./samtools sort -@ {num_of_threads} -o {bam_file_path} &&
-./samtools index -@ {num_of_threads} {bam_file_path} &&
+bowtie2 -p {num_of_threads} -x {os.path.join(ref_dir_path, species)} {reads_format_opt} {reads_files_opt} |
+samtools view -@ {num_of_threads} -b |
+samtools sort -@ {num_of_threads} -o {bam_file_path} &&
+samtools index -@ {num_of_threads} {bam_file_path} &&
 echo {root_pass} | sudo -S docker run \
 -v "{ref_dir_path}":"/ref" \
 -v "{trg_dir_path}":"/trg" \
 google/deepvariant /opt/deepvariant/bin/run_deepvariant \
---num_shards={num_of_threads} --model_type=WGS \
+--num_shards={num_of_threads} --model_type={seq_type} \
 --ref=/ref/{ref_file_name} \
 --reads=/trg/{os.path.basename(bam_file_path)} \
 --output_vcf=/trg/{src_file_base}.vcf.gz''')
         if species != 'homo_sapiens':
                 continue
         run_command(f'''
-echo {root_pass} | sudo -S chmod -R 777 {trg_dir_path} &&
-echo {root_pass} | sudo -S docker run \
--v $HOME/vep_data:/opt/vep/.vep \
--v "{trg_dir_path}":"/trg" \
-ensemblorg/ensembl-vep ./vep \
---cache --dir_cache /opt/vep/.vep/ \
---fork {num_of_threads} --quiet --no_stats --tab --offline -e \
--i /trg/{src_file_base}.vcf.gz \
--o /trg/{src_file_base}_ann.tsv &&
-echo {root_pass} | sudo -S chmod -R 777 {trg_dir_path}''')
+vep --cache --fork {num_of_threads} --quiet --no_stats --tab --offline -e \
+-i {vcf_file_path} -o {ann_file_path}''')
         os.remove(vcf_file_path)
         os.remove(vcf_file_path + '.tbi')
