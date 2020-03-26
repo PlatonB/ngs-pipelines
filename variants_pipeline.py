@@ -1,13 +1,16 @@
-__version__ = 'V2.0'
+__version__ = 'V2.1'
 
 print('''
 Python3-программа, формирующая пайплайн
 от ридов до характеристик SNPs.
+
 Автор: Платон Быкадоров (platon.work@gmail.com), 2019-2020.
-Версия: V2.0.
+Версия: V2.1.
 Лицензия: GNU General Public License version 3.
 Поддержать проект: https://money.yandex.ru/to/41001832285976
 Документация: https://github.com/PlatonB/ngs-pipelines/blob/master/README.md
+Багрепорты/пожелания/общение: https://github.com/PlatonB/ngs-pipelines/issues
+Справка по CLI: python3 variants_pipeline.py -h
 
 Упрощённая схема пайплайна:
 Выравнивание --> коллинг --> (только для человека) аннотирование.
@@ -17,6 +20,9 @@ Python3-программа, формирующая пайплайн
 FASTA/Q с референсным геномом.
 Каждый FASTA/Q-файл (или каждая пара
 файлов) обрабатывается по-отдельности.
+
+Исследуемые риды и референсный геном могут
+быть сжаты, но только с помощью BGZIP.
 
 Если риды - парные, то каждый тандем исследуемых
 файлов должен иметь общее начало имён:
@@ -29,9 +35,6 @@ SA1016T_R2.fastq.gz
 
 SA1016X3_3L_R1.fastq.gz
 SA1016X3_3L_R2.fastq.gz
-
-Исследуемые риды и референсный геном могут
-быть сжаты, но только с помощью BGZIP.
 ''')
 
 import sys, os
@@ -45,8 +48,8 @@ argparser = add_main_args()
 #этого пайплайна будет
 #запрашиваемый программой
 #DeepVariant тип секвенирования.
-argparser.add_argument('--seq-type', dest='seq_type', type=str, choices=['wgs', 'wes', 'pacbio'],
-                       help='Тип секвенирования')
+argparser.add_argument('-s', '--seq-type', metavar='[wgs]', default='wgs', choices=['wgs', 'wes', 'pacbio'], dest='seq_type', type=str,
+                       help='{wgs, wes, pacbio} Тип секвенирования')
 
 #К парсингу разумно
 #приступать только один
