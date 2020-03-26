@@ -172,11 +172,14 @@ CTRL+D
 | DeepVariant | Коллинг вариантов |
 | Ensembl VEP | Аннотирование вариантов. Только для Homo Sapiens |
 
-Пример команды получения вариантов и их характеристик по непарным ридам полного человеческого генома в 4 потока.
+Пример команды получения вариантов и их характеристик по непарным ридам полного человеческого экзома в 8 потоков.
 ```
-python $HOME/programms/variants_pipeline.py \
--s $HOME/ngs/unpaired_reads \
--r $HOME/ngs/hg38_ref/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz \
--t $HOME/trg \
---threads-quan 4 --species-name homo_sapiens --reads-type unpaired --seq-type wgs
+python variants_pipeline.py \
+-S $HOME/ngs/unpaired_reads \
+-G $HOME/ngs/hg38_ref/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz \
+-O homo_sapiens \
+-R unpaired \
+-t $HOME/ngs/trg \
+-p 8 \
+-s wes
 ```
