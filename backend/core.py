@@ -1,7 +1,7 @@
-__version__ = 'V1.0'
+__version__ = 'V2.0'
 
-from argparse import ArgumentParser
 import os, re, sys
+from argparse import ArgumentParser
 from subprocess import run, PIPE, STDOUT
 
 def add_main_args():
@@ -22,29 +22,25 @@ def add_main_args():
         а они дальше могут добавить
         туда специфические опции.
         '''
-        argparser = ArgumentParser(description='Аргументы командной строки.')
-        argparser.add_argument('-s', '--src-dir-path', metavar='путь', dest='src_dir_path', type=str,
+        argparser = ArgumentParser(description='''
+Краткая форма с большой буквы - обязательный аргумент.
+В квадратных скобках - значение по умолчанию.
+В фигурных скобках - перечисление возможных значений.
+''')
+        argparser.add_argument('-S', '--src-dir-path', metavar='str', dest='src_dir_path', type=str,
                                help='Путь к папке с исследуемыми FASTA/Q-файлами')
-        argparser.add_argument('-r', '--ref-file-path', metavar='путь', dest='ref_file_path', type=str,
+        argparser.add_argument('-G', '--ref-file-path', metavar='str', dest='ref_file_path', type=str,
                                help='Путь к FASTA/Q-файлу с референсным геномом')
-        argparser.add_argument('-t', '--trg-top-dir-path', metavar='путь', dest='trg_top_dir_path', type=str,
-                               help='Путь к папке для результатов')
-        argparser.add_argument('--threads-quan', metavar='[4]', dest='threads_quan', type=str, default='4',
-                               help='Количество потоков, задействуемых компонентами пайплайна (не переборщите ☺)')
-        argparser.add_argument('--species-name', metavar='вид', dest='species_name', type=str,
+        argparser.add_argument('-O', '--species-name', metavar='str', dest='species_name', type=str,
                                help='Биологический вид (допустимы точки, дефисы, заглавные и строчные буквы)')
-        argparser.add_argument('--reads-type', dest='reads_type', type=str, choices=['paired', 'unpaired'],
+        argparser.add_argument('-R', '--reads-type', dest='reads_type', type=str, choices=['paired', 'unpaired'],
                                help='Парные или непарные чтения')
+        argparser.add_argument('-t', '--trg-top-dir-path', metavar='[None]', dest='trg_top_dir_path', type=str,
+                               help='Путь к папке для результатов (по умолчанию - путь к исходной папке)')
+        argparser.add_argument('-p', '--threads-quan', metavar='[4]', dest='threads_quan', type=str, default='4',
+                               help='Количество потоков, задействуемых компонентами пайплайна (не переборщите ☺)')
         return argparser
 
-def get_common_letters(file_name_1_char, file_name_2_char):
-        '''
-        Сопоставление букв имён исходных файлов.
-        Нужно для выявления совпадающего начала.
-        '''
-        if file_name_1_char == file_name_2_char:
-                return file_name_1_char
-        
 '''
 Запуск любой линуксовой команды
 с выводом STDOUT и STDERR.
@@ -74,10 +70,13 @@ class Core():
                 self.src_dir_path = os.path.normpath(args.src_dir_path)
                 self.ref_file_path = os.path.normpath(args.ref_file_path)
                 self.ref_dir_path, self.ref_file_name = os.path.split(self.ref_file_path)
-                self.trg_top_dir_path = os.path.normpath(args.trg_top_dir_path)
-                self.threads_quan = args.threads_quan
                 self.species_name = re.sub(r'[\.-]', '_', args.species_name).lower()
                 self.reads_type = args.reads_type
+                if args.trg_top_dir_path == None:
+                        self.trg_top_dir_path = self.src_dir_path
+                else:
+                        self.trg_top_dir_path = os.path.normpath(args.trg_top_dir_path)
+                self.threads_quan = args.threads_quan
                 
         def compress_ref_file(self):
                 '''
@@ -181,11 +180,11 @@ class Core():
                         src_file_1_path = os.path.join(self.src_dir_path, element[0])
                         src_file_2_path = os.path.join(self.src_dir_path, element[1])
                         reads_files_opt = f'-1 {src_file_1_path} -2 {src_file_2_path}'
-                        src_file_base_gen = map(get_common_letters, list(element[0]), list(element[1]))
+                        min_letters_quan = min(len(element[0]), len(element[1]))
                         src_file_base = ''
-                        for char in src_file_base_gen:
-                                if char != None:
-                                        src_file_base += char
+                        for index in range(min_letters_quan):
+                                if element[0][index] == element[1][index]:
+                                        src_file_base += element[0][index]
                                 else:
                                         break
                 else:
