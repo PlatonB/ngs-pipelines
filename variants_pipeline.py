@@ -1,4 +1,4 @@
-__version__ = 'V3.0'
+__version__ = 'V3.1'
 
 print(f'''
 Python3-программа, формирующая пайплайн
@@ -83,11 +83,9 @@ core.seq_type = args.seq_type.upper()
 #данных dbSNP и формирование их
 #урезанной версии, группировка
 #имён исследуемых FASTA/Q.
-print(f'\n{core.ref_file_name}: сжатие и индексация\n')
 core.compress_ref_file()
 core.index_ref_file()
 if core.species_name == 'homo_sapiens':
-        print('\ndbSNP: скачивание и обработка')
         dbsnp_tsv_paths = prep_dbsnp_data(core.ref_dir_path, core.threads_quan)
 nested_file_names = core.group_file_names()
 
@@ -97,13 +95,12 @@ for element in nested_file_names:
         
         #Выравнивание, конвертация SAM в
         #BAM, сортировка и индексация BAM.
-        print(f'\n{", ".join(element)}: выравнивание, SAM --> BAM, сортировка и индексация BAM')
         bam_file_base_path = core.get_srtd_bam(element)
         
         #Неинтересная возня с путями к файлам.
         #Когда наладится запуск DeepVariant
         #без Docker, этот код упростится.
-        if bam_file_base_path == None:
+        if bam_file_base_path is None:
                 continue
         trg_dir_path, bam_file_name = os.path.split(f'{bam_file_base_path}_srtd.bam')
         rawvcf_file_path = f'{bam_file_base_path}.vcf.gz'
@@ -112,7 +109,7 @@ for element in nested_file_names:
         
         #По BAM и референсному геному
         #осуществляется коллинг SNPs.
-        print(f'\n{bam_file_name}: коллинг')
+        print(f'\n{bam_file_name}: коллинг\n')
         run_command(f'''
 docker run \
 -v "{core.ref_dir_path}":"/ref" \
@@ -134,7 +131,7 @@ google/deepvariant /opt/deepvariant/bin/run_deepvariant \
         #В случае человеческого генома
         #их можно получить по dbSNP,
         #что будет сделано ниже.
-        print(f'\n{rawvcf_file_name}: фильтрация и замена точек на rsIDs')
+        print(f'\n{rawvcf_file_name}: фильтрация и замена точек на rsIDs\n')
         with gzip.open(rawvcf_file_path, mode='rt') as rawvcf_file_opened:
                 
                 #Предполагается, что варианты
@@ -179,18 +176,18 @@ google/deepvariant /opt/deepvariant/bin/run_deepvariant \
                                 #по аллелям, точка в сыром VCF
                                 #заменяется на rsID из dbSNP.
                                 for line in rawvcf_file_opened:
-                                        row = line.split('\t')
-                                        chrom, pos, qual = row[0], int(row[1]), float(row[5])
+                                        vcf_row = line.split('\t')
+                                        chrom, pos, qual = vcf_row[0], int(vcf_row[1]), float(vcf_row[5])
                                         if qual < 20:
                                                 continue
                                         try:
-                                                for tup in dbsnp_tsvs_opened[chrom].fetch(chrom,
-                                                                                          pos - 1,
-                                                                                          pos,
-                                                                                          parser=asTuple()):
-                                                        if row[3] == tup[3] and row[4] == tup[4]:
-                                                                row[2] = tup[2]
-                                                                vcf_file_opened.write('\t'.join(row))
+                                                for dbsnp_tup in dbsnp_tsvs_opened[chrom].fetch(chrom,
+                                                                                                pos - 1,
+                                                                                                pos,
+                                                                                                parser=asTuple()):
+                                                        if vcf_row[3] == dbsnp_tup[3] and vcf_row[4] in dbsnp_tup[4].split(','):
+                                                                vcf_row[2] = dbsnp_tup[2]
+                                                                vcf_file_opened.write('\t'.join(vcf_row))
                                                                 break
                                                 else:
                                                         vcf_file_opened.write(line)
