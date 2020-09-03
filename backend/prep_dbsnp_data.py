@@ -1,4 +1,4 @@
-__version__ = 'V1.0'
+__version__ = 'V1.1'
 
 import sys, os, urllib.request, re
 sys.dont_write_bytecode = True
@@ -17,6 +17,7 @@ def prep_dbsnp_data(ref_dir_path, threads_quan):
         необходимые сниповому пайплайну
         первые 5 столбцов каждой из них.
         '''
+        print('\ndbSNP: скачивание и обработка, если это не сделано ранее\n')
         
         #Сбор и размещение в файл
         #адресов архивов dbSNP.
@@ -28,7 +29,7 @@ def prep_dbsnp_data(ref_dir_path, threads_quan):
         #соответствующего пайплайна.
         dbsnp_urlstxt_path = os.path.join(ref_dir_path, 'dbsnp_urls.txt')
         ens_vcfspage_url = 'ftp://ftp.ensembl.org/pub/release-100/variation/vcf/homo_sapiens/'
-        print('dbsnp_urls.txt', end='... ')
+        print('\ndbsnp_urls.txt', end='... ')
         if os.path.exists(dbsnp_urlstxt_path) == False:
                 with urllib.request.urlopen(ens_vcfspage_url) as response:
                         dbsnp_vcf_names = re.findall(r'homo_sapiens-chr\w+\.vcf\.gz(?=\r\n)',
@@ -69,7 +70,7 @@ def prep_dbsnp_data(ref_dir_path, threads_quan):
                         if os.path.exists(dbsnp_tsv_path) == False:
                                 run_command(f'''
 curl -s {dbsnp_vcf_url} |
-zgrep -i "^[^#]" |
+zgrep "^[^#]" |
 cut -f 1-5 |
 bgzip -l 9 -@{threads_quan} > {dbsnp_tsv_path}''')
                         else:

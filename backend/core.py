@@ -1,4 +1,4 @@
-__version__ = 'V2.0'
+__version__ = 'V2.1'
 
 import os, re, sys
 from argparse import ArgumentParser
@@ -33,11 +33,11 @@ def add_main_args():
                                help='Путь к FASTA/Q-файлу с референсным геномом')
         argparser.add_argument('-O', '--species-name', metavar='str', dest='species_name', type=str,
                                help='Биологический вид (допустимы точки, дефисы, заглавные и строчные буквы)')
-        argparser.add_argument('-R', '--reads-type', dest='reads_type', type=str, choices=['paired', 'unpaired'],
+        argparser.add_argument('-R', '--reads-type', choices=['paired', 'unpaired'], dest='reads_type', type=str,
                                help='Парные или непарные чтения')
         argparser.add_argument('-t', '--trg-top-dir-path', metavar='[None]', dest='trg_top_dir_path', type=str,
                                help='Путь к папке для результатов (по умолчанию - путь к исходной папке)')
-        argparser.add_argument('-p', '--threads-quan', metavar='[4]', dest='threads_quan', type=str, default='4',
+        argparser.add_argument('-p', '--threads-quan', metavar='[4]', default='4', dest='threads_quan', type=str,
                                help='Количество потоков, задействуемых компонентами пайплайна (не переборщите ☺)')
         return argparser
 
@@ -72,7 +72,7 @@ class Core():
                 self.ref_dir_path, self.ref_file_name = os.path.split(self.ref_file_path)
                 self.species_name = re.sub(r'[\.-]', '_', args.species_name).lower()
                 self.reads_type = args.reads_type
-                if args.trg_top_dir_path == None:
+                if args.trg_top_dir_path is None:
                         self.trg_top_dir_path = self.src_dir_path
                 else:
                         self.trg_top_dir_path = os.path.normpath(args.trg_top_dir_path)
@@ -89,6 +89,7 @@ class Core():
                 пока не поддерживается.
                 '''
                 if self.ref_file_name[-3:] != '.gz':
+                        print(f'\n{self.ref_file_name}: сжатие\n')
                         run_command(f'bgzip -@ {self.threads_quan} -l 9 -i {self.ref_file_path}')
                         self.ref_file_name += '.gz'
                         self.ref_file_path = os.path.join(self.ref_dir_path, self.ref_file_name)
@@ -103,11 +104,13 @@ class Core():
                 то данные действия будут пропущены.
                 '''
                 for file_name in os.listdir(self.ref_dir_path):
-                        if re.match(self.species_name + r'\.\d+\.bt\d+', file_name) != None:
+                        if re.match(self.species_name + r'\.\d+\.bt2', file_name) is not None:
                                 break
                 else:
+                        print(f'\n{self.ref_file_name}: создание .bt2-индексов\n')
                         run_command(f'bowtie2-build --threads {self.threads_quan} {self.ref_file_path} {os.path.join(self.ref_dir_path, self.species_name)}')
                 if os.path.exists(f'{self.ref_file_path}.fai') == False:
+                        print(f'\n{self.ref_file_name}: создание .fai-индекса\n')
                         run_command(f'samtools faidx {self.ref_file_path}')
                         
         def group_file_names(self):
@@ -161,9 +164,9 @@ class Core():
                 #формат по расширению.
                 #В случае неуспеха файл или
                 #пара будут проигнорированы.
-                if re.search(r'\.fq\b|\.fastq\b', element[0]) != None:
+                if re.search(r'\.fq\b|\.fastq\b', element[0]) is not None:
                         reads_format_opt = '-q'
-                elif re.search(r'\.fa\b|\.fasta\b|.mfa\b|.fna\b', element[0]) != None:
+                elif re.search(r'\.fa\b|\.fasta\b|.mfa\b|.fna\b', element[0]) is not None:
                         reads_format_opt = '-f'
                 else:
                         print(f'{element[0].split(".")[-1]} - неподдерживаемое расширение')
@@ -217,6 +220,7 @@ class Core():
                 #SAM-вывод сразу перехватывается
                 #для получения и сортировки BAM.
                 #Отсортированный BAM индексируется.
+                print(f'\n{", ".join(element)}: выравнивание, SAM --> BAM, сортировка и индексация BAM\n')
                 run_command(f'''
 bowtie2 -p {self.threads_quan} -x {os.path.join(self.ref_dir_path, self.species_name)} {reads_format_opt} {reads_files_opt} |
 samtools view -@ {self.threads_quan} -b |
